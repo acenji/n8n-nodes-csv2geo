@@ -1,0 +1,48 @@
+{
+  "name": "n8n-nodes-csv2geo",
+  "version": "0.1.0",
+  "description": "n8n community node for CSV2GEO geocoding API. Forward & reverse geocoding, places search, autocomplete across 200+ countries.",
+  "keywords": [
+    "n8n-community-node-package",
+    "geocoding",
+    "geocode",
+    "reverse geocoding",
+    "latitude longitude",
+    "address to coordinates",
+    "places search",
+    "csv2geo"
+  ],
+  "license": "MIT",
+  "homepage": "https://csv2geo.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/acenji/n8n-nodes-csv2geo"
+  },
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc && gulp build:icons",
+    "dev": "tsc --watch",
+    "lint": "tslint -p tsconfig.json -c tslint.json",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/Csv2GeoApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Csv2Geo/Csv2Geo.node.js"
+    ]
+  },
+  "devDependencies": {
+    "n8n-workflow": "*",
+    "typescript": "~5.3.0",
+    "gulp": "^4.0.2"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}
