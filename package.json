@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-csv2geo",
-  "version": "0.1.0",
-  "description": "n8n community node for CSV2GEO geocoding API. Forward & reverse geocoding, places search, autocomplete across 200+ countries.",
+  "version": "0.3.0",
+  "description": "n8n community node for CSV2GEO geocoding API. Forward & reverse geocoding, places search, autocomplete, plus boundaries (postcode → polygon, ancestors walk-up, consolidated cities) across 200+ countries.",
   "keywords": [
     "n8n-community-node-package",
     "geocoding",
@@ -20,7 +20,7 @@
   },
   "main": "index.js",
   "scripts": {
-    "build": "tsc && gulp build:icons",
+    "build": "tsc && cp nodes/Csv2Geo/csv2geo.svg dist/nodes/Csv2Geo/",
     "dev": "tsc --watch",
     "lint": "tslint -p tsconfig.json -c tslint.json",
     "prepublishOnly": "npm run build"

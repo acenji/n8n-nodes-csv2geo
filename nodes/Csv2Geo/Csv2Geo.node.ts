@@ -58,6 +58,25 @@ export class Csv2Geo implements INodeType {
 						description: 'Get address suggestions for partial input',
 						action: 'Autocomplete an address',
 					},
+					// Sprint 1.8 — Boundaries API
+					{
+						name: 'Postcode → Boundary',
+						value: 'boundaryByPostcode',
+						description: 'One-call: postcode → polygon, bbox, population, Wikidata',
+						action: 'Lookup boundary by postcode',
+					},
+					{
+						name: 'Walk Up Admin Chain',
+						value: 'divisionAncestors',
+						description: 'Walk parent_division_id from input up to country (Geoapify part-of parity)',
+						action: 'Walk up admin chain for division',
+					},
+					{
+						name: 'Consolidated City',
+						value: 'divisionConsolidated',
+						description: 'Resolve any of NYC\'s 5 boroughs into the canonical NYC entity + members',
+						action: 'Lookup consolidated city',
+					},
 				],
 				default: 'forwardGeocode',
 			},
@@ -134,6 +153,87 @@ export class Csv2Geo implements INodeType {
 						operation: ['autocomplete'],
 					},
 				},
+			},
+			// Sprint 1.8 — Boundaries fields
+			{
+				displayName: 'Postcode',
+				name: 'postcode',
+				type: 'string',
+				default: '',
+				placeholder: '90210',
+				description: 'Postcode in any common format (90210, SW1A 1AA, K1A 0B1)',
+				required: true,
+				displayOptions: { show: { operation: ['boundaryByPostcode'] } },
+			},
+			{
+				displayName: 'Country (ISO 3166-1 alpha-2)',
+				name: 'boundaryCountry',
+				type: 'string',
+				default: 'US',
+				placeholder: 'US',
+				description: 'ISO 3166-1 alpha-2 country code',
+				required: true,
+				displayOptions: { show: { operation: ['boundaryByPostcode'] } },
+			},
+			{
+				displayName: 'Division ID',
+				name: 'divisionId',
+				type: 'string',
+				default: '',
+				description: 'Overture ID of the division (get one from Postcode → Boundary first)',
+				required: true,
+				displayOptions: { show: { operation: ['divisionAncestors', 'divisionConsolidated'] } },
+			},
+			{
+				displayName: 'Boundary Options',
+				name: 'boundaryOptions',
+				type: 'collection',
+				placeholder: 'Add Option',
+				default: {},
+				displayOptions: { show: { operation: ['boundaryByPostcode', 'divisionAncestors', 'divisionConsolidated'] } },
+				options: [
+					{
+						displayName: 'Include Geometry',
+						name: 'includeGeometry',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to include the polygon as GeoJSON in the response',
+					},
+					{
+						displayName: 'Polygon Precision',
+						name: 'precision',
+						type: 'options',
+						default: 'med',
+						options: [
+							{ name: 'Low (~1KB)', value: 'low' },
+							{ name: 'Med (~10KB, default)', value: 'med' },
+							{ name: 'Full (source resolution)', value: 'full' },
+						],
+						description: 'Polygon detail tier — only meaningful when geometry is included',
+					},
+					{
+						displayName: 'Max Depth (ancestors only)',
+						name: 'maxDepth',
+						type: 'number',
+						default: 8,
+						description: 'Hard cap on ancestor walk depth (1-12)',
+					},
+					{
+						displayName: 'Language',
+						name: 'lang',
+						type: 'string',
+						default: '',
+						placeholder: 'de, ja, zh-Hant, pt-BR…',
+						description: 'BCP-47 language tag — replaces division names with the Overture translation (Sprint 2.1). Empty = primary name. Falls back to base language when the region-specific tag is not in the data.',
+					},
+					{
+						displayName: 'Include Other Names (translations map)',
+						name: 'includeOtherNames',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to attach the full other_names map (~78 langs avg for top-level divisions). Useful for client-side language switching.',
+					},
+				],
 			},
 			// Shared fields
 			{
@@ -217,6 +317,38 @@ export class Csv2Geo implements INodeType {
 					if (country) qs.country = country;
 					const additional = this.getNodeParameter('additionalFields', i, {}) as Record<string, any>;
 					if (additional.limit) qs.limit = additional.limit;
+				} else if (operation === 'boundaryByPostcode') {
+					endpoint = '/divisions/by-postcode';
+					qs.code = this.getNodeParameter('postcode', i) as string;
+					qs.country = this.getNodeParameter('boundaryCountry', i) as string;
+					const opts = this.getNodeParameter('boundaryOptions', i, {}) as Record<string, any>;
+					const includes: string[] = [];
+					if (opts.includeGeometry) includes.push('geometry');
+					if (opts.includeOtherNames) includes.push('other_names');
+					if (includes.length) qs.include = includes.join(',');
+					if (opts.precision) qs.precision = opts.precision;
+					if (opts.lang) qs.lang = opts.lang;
+				} else if (operation === 'divisionAncestors') {
+					const id = this.getNodeParameter('divisionId', i) as string;
+					endpoint = `/divisions/ancestors/${encodeURIComponent(id)}`;
+					const opts = this.getNodeParameter('boundaryOptions', i, {}) as Record<string, any>;
+					const includes: string[] = [];
+					if (opts.includeGeometry) includes.push('geometry');
+					if (opts.includeOtherNames) includes.push('other_names');
+					if (includes.length) qs.include = includes.join(',');
+					if (opts.precision) qs.precision = opts.precision;
+					if (opts.maxDepth) qs.max_depth = opts.maxDepth;
+					if (opts.lang) qs.lang = opts.lang;
+				} else if (operation === 'divisionConsolidated') {
+					const id = this.getNodeParameter('divisionId', i) as string;
+					endpoint = `/divisions/consolidated/${encodeURIComponent(id)}`;
+					const opts = this.getNodeParameter('boundaryOptions', i, {}) as Record<string, any>;
+					const includes: string[] = [];
+					if (opts.includeGeometry) includes.push('geometry');
+					if (opts.includeOtherNames) includes.push('other_names');
+					if (includes.length) qs.include = includes.join(',');
+					if (opts.precision) qs.precision = opts.precision;
+					if (opts.lang) qs.lang = opts.lang;
 				}
 
 				const response = await this.helpers.httpRequest({
@@ -284,6 +416,64 @@ export class Csv2Geo implements INodeType {
 							pairedItem: { item: i },
 						});
 					}
+				} else if (operation === 'boundaryByPostcode' && response.result) {
+					// Flatten the single result for downstream nodes.
+					const r = response.result;
+					returnData.push({
+						json: {
+							id: r.id,
+							name: r.name,
+							subtype: r.subtype,
+							country: r.country,
+							region: r.region,
+							population: r.population,
+							wikidata: r.wikidata,
+							latitude: r.location?.lat,
+							longitude: r.location?.lng,
+							bbox: r.bbox,
+							geometry: r.geometry,
+							confidence: r.confidence,
+						},
+						pairedItem: { item: i },
+					});
+				} else if (operation === 'divisionAncestors' && response.results?.length > 0) {
+					// One row per level — depth 0 = leaf, last = root.
+					for (let d = 0; d < response.results.length; d++) {
+						const r = response.results[d];
+						returnData.push({
+							json: {
+								depth: d,
+								id: r.id,
+								name: r.name,
+								subtype: r.subtype,
+								country: r.country,
+								region: r.region,
+								population: r.population,
+								wikidata: r.wikidata,
+								parent_division_id: r.parent_division_id,
+								bbox: r.bbox,
+								geometry: r.geometry,
+							},
+							pairedItem: { item: i },
+						});
+					}
+				} else if (operation === 'divisionConsolidated' && response.canonical) {
+					returnData.push({
+						json: {
+							canonical_id: response.canonical.id,
+							canonical_name: response.canonical.name,
+							country: response.canonical.country,
+							population: response.canonical.population,
+							wikidata: response.canonical.wikidata,
+							matched_as: response.matched_as,
+							source: response.source,
+							member_count: (response.members || []).length,
+							members: response.members,
+							bbox: response.canonical.bbox,
+							geometry: response.canonical.geometry,
+						},
+						pairedItem: { item: i },
+					});
 				} else {
 					returnData.push({
 						json: response,
